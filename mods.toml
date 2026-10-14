@@ -1,0 +1,25 @@
+modLoader = "javafml"
+loaderVersion = "[52,)"
+license = "All Rights Reserved"
+
+[[mods]]
+modId = "halloweenhunt"
+version = "1.0.0"
+displayName = "Halloween Hunt"
+description = '''Halloween tag game: Monster Hunter vs Monsters, Mangtae Grandpa'''
+
+[[dependencies.halloweenhunt]]
+modId = "forge"
+mandatory = true
+type = "required"
+versionRange = "[52,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.halloweenhunt]]
+modId = "minecraft"
+mandatory = true
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
