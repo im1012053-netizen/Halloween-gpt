@@ -39,7 +39,8 @@ public final class MonsterRoles {
     private static final Map<UUID,Frozen> FROZEN = new HashMap<>();
     private static final Set<UUID> REVIVE_USED = new HashSet<>();
     private static final List<ItemEntity> DROPPED_HEADS = new ArrayList<>();
-    private static Corpse corpse;
+    private static final Map<UUID, Corpse> CORPSES = new HashMap<>();
+    private static final RoleAssignments ASSIGNMENTS = new RoleAssignments();
     private record Frozen(ServerLevel level, Vec3 position, int until) {}
     private record Transform(ItemStack previousHat, int until) {}
     private static final class Corpse {
@@ -56,12 +57,13 @@ public final class MonsterRoles {
         }
     }
     private MonsterRoles() {}
-    private static boolean named(Player p, String name) { return name.equalsIgnoreCase(p.getGameProfile().getName()); }
-    public static boolean isFranken(Player p) { return named(p, "night_way") && HuntManager.isMonsterAlive(p); }
-    public static boolean isMedusa(Player p) { return named(p, "seolhee1207") && HuntManager.isMonsterAlive(p); }
-    public static boolean isJack(Player p) { return named(p, "DamDaDam") && HuntManager.isMonsterAlive(p); }
+    public static MonsterRole role(Player p) { return ASSIGNMENTS.resolve(p.getUUID(), p.getGameProfile().getName()); }
+    public static void clearAssignments() { ASSIGNMENTS.clear(); }
+    public static boolean isFranken(Player p) { return role(p) == MonsterRole.FRANKENSTEIN && HuntManager.isMonsterAlive(p); }
+    public static boolean isMedusa(Player p) { return role(p) == MonsterRole.MEDUSA && HuntManager.isMonsterAlive(p); }
+    public static boolean isJack(Player p) { return role(p) == MonsterRole.JACK && HuntManager.isMonsterAlive(p); }
     public static boolean isTransformed(Player p) { return TRANSFORMED.containsKey(p.getUUID()); }
-    public static boolean hasCorpse() { return corpse != null; }
+    public static boolean hasCorpse() { return !CORPSES.isEmpty(); }
     public static boolean isFrozen(Player p) { return FROZEN.containsKey(p.getUUID()); }
     public static boolean canAct(Player p) { return !p.isSpectator() && !isFrozen(p) && !(p instanceof ServerPlayer sp && SackManager.isSacked(sp)); }
     public static boolean immune(ServerPlayer p) { return p.server.getTickCount() < IMMUNE.getOrDefault(p.getUUID(), 0); }
@@ -73,27 +75,59 @@ public final class MonsterRoles {
         return item;
     }
     public static void kit(ServerPlayer p) {
-        if (named(p, "night_way")) {
+        var playerScale = p.getAttribute(Attributes.SCALE);
+        if (playerScale != null) playerScale.setBaseValue(!HuntManager.isHunter(p) && role(p) == MonsterRole.FRANKENSTEIN ? 1.3 : 1.0);
+        if (HuntManager.isHunter(p)) return;
+        if (role(p) == MonsterRole.MANGTAE) {
+            HuntItems.giveMangtaeKit(p);
+        } else if (role(p) == MonsterRole.FRANKENSTEIN) {
             var scale = p.getAttribute(Attributes.SCALE);
             if (scale != null) {
                 scale.removeModifier(SCALE);
                 scale.setBaseValue(HuntManager.isHunter(p) ? 1.0 : 1.3);
             }
             if (HuntManager.isHunter(p)) return;
-            p.setItemSlot(EquipmentSlot.HEAD, model(new ItemStack(Items.STICK), "franken_head", "프랑켄슈타인의 머리", 1002));
+            p.setItemSlot(EquipmentSlot.HEAD, model(new ItemStack(Items.CARVED_PUMPKIN), "franken_head", "프랑켄슈타인의 머리", 1002));
             p.getInventory().setItem(0, new ItemStack(Items.GOLDEN_CARROT, 3));
-        } else if (named(p, "seolhee1207") && !HuntManager.isHunter(p)) {
+        } else if (role(p) == MonsterRole.MEDUSA && !HuntManager.isHunter(p)) {
             p.getInventory().setItem(0, model(new ItemStack(Items.STICK), PETRIFY, "석화 — 우클릭", 3));
-        } else if (named(p, "DamDaDam") && !HuntManager.isHunter(p)) {
+        } else if (role(p) == MonsterRole.JACK && !HuntManager.isHunter(p)) {
             p.getInventory().setItem(0, new ItemStack(ModItems.COIN.get()));
             p.getInventory().setItem(1, model(new ItemStack(Items.LANTERN), JACK_LANTERN, "잭의 변신 — 변신 중 우클릭: 화염볼", 0));
         }
     }
 
+    public static String assign(ServerPlayer p, MonsterRole requested) {
+        if (HuntManager.isRunning() && (!HuntManager.isMonsterAlive(p) || HuntManager.isHunter(p)))
+            return "게임 중에는 생존한 몬스터만 역할을 바꿀 수 있습니다. 술래 또는 탈락자는 게임 종료 후 지정하세요.";
+        // Restore a transformation before deleting the old role's equipment.
+        logout(p);
+        SackManager.releaseCarrier(p);
+        SackManager.release(p.server, p.getUUID());
+        if (REGEN.remove(p.getUUID()) != null) p.removeEffect(MobEffects.REGENERATION);
+        PETRIFY_READY.remove(p.getUUID()); JACK_READY.remove(p.getUUID());
+        IMMUNE.remove(p.getUUID()); FIRE_READY.remove(p.getUUID()); REVIVE_USED.remove(p.getUUID());
+        CoinTosses.resetPlayer(p);
+        SackManager.resetCooldown(p);
+        for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+            ItemStack item = p.getInventory().getItem(i);
+            boolean oldRoleItem = item.is(ModItems.COIN.get()) || item.is(ModItems.MANGTAE_SACK.get());
+            for (String id : new String[]{HuntItems.STICK, HuntItems.ROPE, PETRIFY, HEAD, JACK_LANTERN,
+                    "franken_head", "mangtae_hat", "jack_head"}) oldRoleItem |= HuntItems.is(item, id);
+            if (oldRoleItem) p.getInventory().setItem(i, ItemStack.EMPTY);
+        }
+        ASSIGNMENTS.assign(p.getUUID(), requested);
+        kit(p);
+        p.sendSystemMessage(Component.literal("§6역할 변경: " + roleName(p) +
+                (HuntManager.isRunning() ? " §f— 스킬을 사용할 수 있습니다." : " §f— /hunt start 후 스킬을 체험할 수 있습니다.")));
+        return null;
+    }
+
     public static String roleName(Player p) {
-        if (named(p, "night_way")) return "§2프랑켄슈타인";
-        if (named(p, "seolhee1207")) return "§7메두사";
-        if (named(p, "DamDaDam")) return "§6잭";
+        if (role(p) == MonsterRole.MANGTAE) return "§6망태할아버지";
+        if (role(p) == MonsterRole.FRANKENSTEIN) return "§2프랑켄슈타인";
+        if (role(p) == MonsterRole.MEDUSA) return "§7메두사";
+        if (role(p) == MonsterRole.JACK) return "§6잭";
         return "§a몬스터";
     }
     public static void start(MinecraftServer server) {
@@ -127,7 +161,7 @@ public final class MonsterRoles {
             body.setShowArms(true); body.setNoBasePlate(true);
             body.setCustomNameVisible(true);
             body.setCustomName(Component.literal("§2프랑켄슈타인의 시체 §f— 웅크려 7초 부활"));
-            body.setItemSlot(EquipmentSlot.HEAD, model(new ItemStack(Items.STICK), "corpse_head", "시체", 1002));
+            body.setItemSlot(EquipmentSlot.HEAD, model(new ItemStack(Items.CARVED_PUMPKIN), "corpse_head", "시체", 1002));
             body.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.LEATHER_CHESTPLATE));
             body.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.LEATHER_LEGGINGS));
             body.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.LEATHER_BOOTS));
@@ -136,7 +170,7 @@ public final class MonsterRoles {
             body.setLeftArmPose(new Rotations(-80, 0, -10));
             body.setRightArmPose(new Rotations(-80, 0, 10));
             p.serverLevel().addFreshEntity(body);
-            corpse = new Corpse(p, body);
+            CORPSES.put(p.getUUID(), new Corpse(p, body));
             HuntManager.broadcast(p.server, Component.literal("§2프랑켄슈타인이 쓰러졌다! §f시체 옆에서 7초 동안 웅크리면 부활시킬 수 있다. (시체 60초 유지)"));
         }
         Transform form = TRANSFORMED.remove(p.getUUID());
@@ -226,12 +260,11 @@ public final class MonsterRoles {
             return false;
         });
         IMMUNE.entrySet().removeIf(entry -> now >= entry.getValue());
-        tickCorpse(server, now);
+        for (Corpse body : new ArrayList<>(CORPSES.values())) tickCorpse(server, now, body);
     }
-    private static void tickCorpse(MinecraftServer server, int now) {
-        if (corpse == null) return;
+    private static void tickCorpse(MinecraftServer server, int now, Corpse corpse) {
         ServerPlayer owner = server.getPlayerList().getPlayer(corpse.owner);
-        if (owner == null || now >= corpse.expires || corpse.body.isRemoved()) { removeCorpse(); return; }
+        if (owner == null || now >= corpse.expires || corpse.body.isRemoved()) { removeCorpse(corpse.owner); return; }
         ServerPlayer rescuer = null;
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p != owner && HuntManager.isMonsterAlive(p) && canAct(p) && p.isShiftKeyDown()
@@ -251,13 +284,16 @@ public final class MonsterRoles {
             owner.setHealth(owner.getMaxHealth() / 2);
             owner.resetFallDistance();
             IMMUNE.put(owner.getUUID(), now + 60);
-            removeCorpse();
+            removeCorpse(corpse.owner);
             HuntManager.broadcast(server, Component.literal("§2프랑켄슈타인 부활! §f3초 동안 무적입니다. 부활 기회는 소모되었습니다."));
         }
     }
-    private static void removeCorpse() { if (corpse != null) corpse.body.discard(); corpse = null; }
+    private static void removeCorpse(UUID owner) {
+        Corpse removed = CORPSES.remove(owner);
+        if (removed != null) removed.body.discard();
+    }
     public static void logout(ServerPlayer p) {
-        if (corpse != null && corpse.owner.equals(p.getUUID())) removeCorpse();
+        removeCorpse(p.getUUID());
         FROZEN.remove(p.getUUID());
         Transform t = TRANSFORMED.remove(p.getUUID());
         if (t != null) p.setItemSlot(EquipmentSlot.HEAD, t.previousHat());
@@ -267,9 +303,11 @@ public final class MonsterRoles {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
             if (p != null) p.setItemSlot(EquipmentSlot.HEAD, entry.getValue().previousHat());
         }
-        removeCorpse();
+        for (Corpse body : CORPSES.values()) body.body.discard();
+        CORPSES.clear();
         for (ItemEntity drop : DROPPED_HEADS) if (!drop.isRemoved()) drop.discard();
         DROPPED_HEADS.clear(); PETRIFY_READY.clear(); JACK_READY.clear(); IMMUNE.clear();
         REGEN.clear(); FIRE_READY.clear(); TRANSFORMED.clear(); FROZEN.clear(); REVIVE_USED.clear();
     }
 }
+

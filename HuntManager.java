@@ -53,7 +53,6 @@ public final class HuntManager {
     private static boolean running;
     private static int elapsed;
     private static UUID hunter;
-    private static UUID mangtae;
     private static int headStartRemaining;
     private static ServerLevel waitingLevel;
     private static Vec3 waitingPosition;
@@ -72,7 +71,7 @@ public final class HuntManager {
         if (isParticipant(p)) nextRecovery.put(p.getUUID(), p.server.getTickCount() + RECOVERY_DELAY);
     }
     public static boolean isHunter(Player p) { return running && p.getUUID().equals(hunter); }
-    public static boolean isMangtae(Player p) { return running && p.getUUID().equals(mangtae); }
+    public static boolean isMangtae(Player p) { return isMonsterAlive(p) && MonsterRoles.role(p) == MonsterRole.MANGTAE; }
     public static boolean isParticipant(Player p) { return running && (p.getUUID().equals(hunter) || monsters.contains(p.getUUID())); }
     public static boolean isMonsterAlive(Player p) { return running && monsters.contains(p.getUUID()) && !caught.contains(p.getUUID()); }
 
@@ -88,7 +87,6 @@ public final class HuntManager {
     /** 대기 중에는 지정 플레이어에게 망태기, 막대기, 밧줄을 지급한다. */
     public static void giveLobbyKit(ServerPlayer p) {
         if (!running) {
-            if (isFixedMangtaePlayer(p)) HuntItems.giveMangtaeKit(p);
             MonsterRoles.kit(p);
         }
     }
@@ -111,17 +109,7 @@ public final class HuntManager {
         ServerPlayer h = candidates.get(RANDOM.nextInt(candidates.size()));
         pastHunters.add(h.getUUID());
 
-        // 지정 플레이어가 몬스터일 때만 망태할아버지로 배정한다.
-        ServerPlayer m = null;
-        for (ServerPlayer p : all) {
-            if (p != h && isFixedMangtaePlayer(p)) {
-                m = p;
-                break;
-            }
-        }
-
         hunter = h.getUUID();
-        mangtae = m == null ? null : m.getUUID();
         monsters.clear();
         caught.clear();
         SackManager.reset();
@@ -139,7 +127,6 @@ public final class HuntManager {
         }
         HuntItems.giveHunterKit(h);
         h.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, HEAD_START_TICKS, 0, false, false, false));
-        if (m != null) HuntItems.giveMangtaeKit(m);
 
         running = true;
         CoinTosses.reset();
@@ -149,8 +136,7 @@ public final class HuntManager {
         title(h, Component.literal("§c괴물사냥꾼"), Component.literal("30초 대기 후 몬스터를 모두 잡아라!"));
         for (ServerPlayer p : all) {
             if (p == h) continue;
-            if (p == m) title(p, Component.literal("§6망태할아버지"), Component.literal("30초 동안 먼저 도망가라! 망태 능력은 술래 출발 후 사용"));
-            else title(p, Component.literal(MonsterRoles.roleName(p)), Component.literal("30초 동안 먼저 도망가라!"));
+            title(p, Component.literal(MonsterRoles.roleName(p)), Component.literal("30초 동안 먼저 도망가라!"));
         }
         broadcast(server, Component.literal("§6[할로윈] §f술래: §c" + h.getName().getString() + " §f/ 몬스터 " + monsters.size() + "명"));
         return null;
@@ -184,7 +170,6 @@ public final class HuntManager {
         monsters.clear();
         caught.clear();
         hunter = null;
-        mangtae = null;
         broadcast(server, reason);
     }
 
@@ -384,6 +369,7 @@ public final class HuntManager {
         server.getPlayerList().broadcastSystemMessage(msg, false);
     }
 }
+
 
 
 

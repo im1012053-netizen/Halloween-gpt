@@ -16,7 +16,7 @@ texture references have been corrected without changing the supplied UV coordina
 
 ## night_way — Frankenstein
 
-- Scale 1.3 in the lobby/as a monster; scale 1.0 as hunter. Helmet: stick, CustomModelData 1002.
+- Scale 1.3 in the lobby/as a monster; scale 1.0 as hunter. Helmet: carved pumpkin, CustomModelData 1002.
 - Three golden carrots per round. Taking damage consumes 2 food points (one hunger icon), clears
   saturation and grants Regeneration II for 5 seconds. Requires at least 2 food points.
 - First death leaves a protected, labeled armor-stand corpse for 60 seconds. Another living monster
@@ -45,3 +45,7 @@ texture references have been corrected without changing the supplied UV coordina
 CustomModelData heads/skills require the corresponding external resource-pack models (not supplied).
 Install the same updated mod JAR on the server and every client. Compilation/package checks are
 performed; first-person framing and multiplayer gameplay still require in-game verification.
+
+Role overrides: see ROLE-COMMANDS.md for `/hunt role <players> <role>` and `auto` restoration.
+Coin release is now 0.25 seconds after clicking (0.2 seconds earlier), and both faces settle upright.
+

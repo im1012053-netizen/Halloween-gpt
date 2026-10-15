@@ -64,5 +64,7 @@ public final class CoinTosses {
         }
     }
     public static void reset() { ACTIVE.clear(); COOLDOWNS.clear(); }
+    public static void resetPlayer(Player p) { ACTIVE.remove(p.getUUID()); COOLDOWNS.remove(p.getUUID()); }
     public static void logout(Player p) { ACTIVE.remove(p.getUUID()); }
 }
+

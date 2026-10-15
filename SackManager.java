@@ -70,6 +70,8 @@ public final class SackManager {
         }
     }
 
+    public static void resetCooldown(ServerPlayer p) { nextCapture.remove(p.getUUID()); }
+
     public static void reset() {
         byVictim.clear();
         victimByCarrier.clear();
@@ -189,6 +191,7 @@ public final class SackManager {
         }
     }
 }
+
 
 
 

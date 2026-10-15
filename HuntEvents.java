@@ -50,6 +50,7 @@ public class HuntEvents {
                     HuntManager.stop(c.getSource().getServer(), Component.literal("§7게임이 강제 종료되었습니다."));
                     return Command.SINGLE_SUCCESS;
                 }))
+                .then(RoleCommands.command())
                 .then(Commands.literal("reset").executes(c -> {
                     HuntManager.resetPastHunters();
                     c.getSource().sendSuccess(() -> Component.literal("술래 기록을 초기화했습니다."), true);
@@ -217,7 +218,7 @@ public class HuntEvents {
     @SubscribeEvent
     public static void shutdown(ServerStoppingEvent e) {
         HuntManager.stop(e.getServer(), Component.literal("§7서버 종료로 게임을 종료했습니다."));
-        MonsterRoles.reset(e.getServer()); CoinTosses.reset();
+        MonsterRoles.reset(e.getServer()); MonsterRoles.clearAssignments(); CoinTosses.reset();
     }
 
     @SubscribeEvent
@@ -236,6 +237,7 @@ public class HuntEvents {
         if (e.getEntity() instanceof ServerPlayer p) HuntManager.onLogout(p);
     }
 }
+
 
 
 
