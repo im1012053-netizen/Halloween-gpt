@@ -38,6 +38,7 @@ public final class HuntManager {
 
     private static final ResourceLocation SPEED_ID = ResourceLocation.fromNamespaceAndPath(HalloweenHunt.MODID, "hunter_speed");
     private static final Random RANDOM = new Random();
+    private static final String MANGTAE_PLAYER_NAME = "BackBUGI624";
 
     private static final Set<UUID> pastHunters = new HashSet<>();
     private static final Set<UUID> monsters = new HashSet<>();
@@ -71,20 +72,30 @@ public final class HuntManager {
         List<ServerPlayer> all = new ArrayList<>(server.getPlayerList().getPlayers());
         if (all.size() < 2) return "최소 2명이 필요합니다.";
 
-        // 한 번이라도 술래를 했던 사람은 제외하고 랜덤
+        // 망태할아버지는 지정한 플레이어에게만 배정한다.
+        ServerPlayer m = null;
+        for (ServerPlayer p : all) {
+            if (MANGTAE_PLAYER_NAME.equalsIgnoreCase(p.getGameProfile().getName())) {
+                m = p;
+                break;
+            }
+        }
+        if (m == null) return MANGTAE_PLAYER_NAME + " 플레이어가 접속해야 시작할 수 있습니다.";
+
+        // 고정 역할은 술래 후보 및 술래 순환 기록에서 제외한다.
+        List<ServerPlayer> eligibleHunters = new ArrayList<>(all);
+        eligibleHunters.remove(m);
         List<ServerPlayer> candidates = new ArrayList<>();
-        for (ServerPlayer p : all) if (!pastHunters.contains(p.getUUID())) candidates.add(p);
+        for (ServerPlayer p : eligibleHunters) {
+            if (!pastHunters.contains(p.getUUID())) candidates.add(p);
+        }
         if (candidates.isEmpty()) {
             pastHunters.clear();
-            candidates.addAll(all);
-            broadcast(server, Component.literal("§7모두 술래를 해봤으므로 술래 기록을 초기화합니다."));
+            candidates.addAll(eligibleHunters);
+            broadcast(server, Component.literal("§7술래 후보가 모두 술래를 해봤으므로 기록을 초기화합니다."));
         }
         ServerPlayer h = candidates.get(RANDOM.nextInt(candidates.size()));
         pastHunters.add(h.getUUID());
-
-        List<ServerPlayer> mons = new ArrayList<>(all);
-        mons.remove(h);
-        ServerPlayer m = mons.get(RANDOM.nextInt(mons.size())); // 몬스터 중 1명이 망태할아버지
 
         hunter = h.getUUID();
         mangtae = m.getUUID();
@@ -270,3 +281,4 @@ public final class HuntManager {
         server.getPlayerList().broadcastSystemMessage(msg, false);
     }
 }
+
