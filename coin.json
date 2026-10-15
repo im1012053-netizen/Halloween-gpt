@@ -765,7 +765,9 @@
       "parent": "minecraft:item/generated",
       "textures": {
         "layer0": "halloweenhunt:item/coin_inventory"
-      }
+      },
+      "gui_light": "front"
     }
-  }
+  },
+  "gui_light": "front"
 }

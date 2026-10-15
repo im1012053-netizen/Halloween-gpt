@@ -184,7 +184,18 @@ public final class MonsterRoles {
         boolean stone = HuntItems.is(stack, PETRIFY), head = HuntItems.is(stack, HEAD);
         boolean jack = HuntItems.is(stack, JACK_LANTERN);
         if (!stone && !head && !jack) return false;
-        if (!HuntManager.isMonsterAlive(p) || HuntManager.isHeadStart() || !canAct(p)) return true;
+        if (!HuntManager.isMonsterAlive(p)) {
+            p.displayClientMessage(Component.literal("§7스킬은 게임 시작 후 생존한 몬스터만 사용할 수 있습니다."), true);
+            return true;
+        }
+        if (HuntManager.isHeadStart()) {
+            p.displayClientMessage(Component.literal("§7술래 대기 30초가 끝나면 스킬을 사용할 수 있습니다."), true);
+            return true;
+        }
+        if (!canAct(p)) {
+            p.displayClientMessage(Component.literal("§7석화 또는 망태기 안에서는 스킬을 사용할 수 없습니다."), true);
+            return true;
+        }
         if (head || (stone && isMedusa(p))) petrify(p, stack, head);
         if (jack && isJack(p)) {
             if (isTransformed(p)) fire(p); else transform(p);
@@ -216,14 +227,22 @@ public final class MonsterRoles {
         if (disposable) stack.shrink(1); else PETRIFY_READY.put(p.getUUID(), now + PETRIFY_COOLDOWN);
     }
     private static void emitStoneWave(StoneWave wave, int now) {
-        double progress = Math.min(1.0, Math.max(0.0, (now - wave.startedAt()) / 16.0));
-        double radius = 0.25 + 4.75 * progress;
-        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.5F, 0.5F, 0.5F), 1.4F);
-        for (int i = 0; i < 48; i++) {
-            double angle = i * Math.PI / 24;
-            wave.level().sendParticles(gray, wave.origin().x + Math.cos(angle) * radius,
-                    wave.origin().y + 0.8, wave.origin().z + Math.sin(angle) * radius,
-                    2, 0.07, 0.25, 0.07, 0);
+        double progress = Math.min(1.0, Math.max(0.0, (now - wave.startedAt()) / 24.0));
+        double radius = 0.35 + 4.65 * progress;
+        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.72F, 0.72F, 0.72F), 2.0F);
+        // Explicit forced packets keep the skill visible with reduced particle settings.
+        // Two rising bands make expansion visible both in first person and to nearby players.
+        for (ServerPlayer viewer : wave.level().players()) {
+            if (viewer.position().distanceToSqr(wave.origin()) > 48 * 48) continue;
+            for (int i = 0; i < 48; i++) {
+                double angle = i * Math.PI / 24;
+                double x = wave.origin().x + Math.cos(angle) * radius;
+                double z = wave.origin().z + Math.sin(angle) * radius;
+                for (double height : new double[]{0.3, 1.15}) {
+                    wave.level().sendParticles(viewer, gray, true, x, wave.origin().y + height, z,
+                            1, 0.025, 0.06, 0.025, 0);
+                }
+            }
         }
     }
     private static void transform(ServerPlayer p) {
@@ -254,7 +273,7 @@ public final class MonsterRoles {
         int now = server.getTickCount();
         STONE_WAVES.removeIf(wave -> {
             int age = now - wave.startedAt();
-            if (age > 16) return true;
+            if (age > 24) return true;
             if (age > 0 && age % 2 == 0) emitStoneWave(wave, now);
             return false;
         });
