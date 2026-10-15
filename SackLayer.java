@@ -29,11 +29,13 @@ public class SackLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<Abs
         pose.pushPose();
         getParentModel().body.translateAndRotate(pose);
         // 몸통 기준: +y = 아래, +z = 등 쪽. 숫자를 바꿔 위치/크기 조절
-        pose.translate(0.0F, 0.42F, 0.40F);
-        pose.scale(0.55F, -0.55F, -0.55F);
+        // Keep the front of the larger sack against the back, without clipping into the body.
+        pose.translate(0.0F, 0.42F, 0.5375F);
+        pose.scale(0.825F, -0.825F, -0.825F);
         pose.translate(0.0F, -0.125F, 0.0F); // 모델 중심을 원점으로 (모델이 높이 20이라 약간 보정)
         Minecraft.getInstance().getItemRenderer().renderStatic(chest, ItemDisplayContext.FIXED, light,
                 OverlayTexture.NO_OVERLAY, pose, buffer, player.level(), player.getId());
         pose.popPose();
     }
 }
+
