@@ -12,7 +12,7 @@ Hold the coin in the main hand and right-click. The right arm flicks upward, the
 spins low on the right side, and lands on the hand. A server-selected front/back result appears
 after the roughly 3-second sequence. A running toss cannot be started again. The last result stays
 visible while holding the coin. The original PNG is 128×128; the JSON metadata and namespaced
-texture references have been corrected without changing the supplied UV coordinates or pixels.
+texture references have been corrected without changing the supplied UV coordinates or pixels. The separately supplied 16×16 inventory icon is selected only in GUI displays.
 
 ## night_way — Frankenstein
 
@@ -47,5 +47,6 @@ Install the same updated mod JAR on the server and every client. Compilation/pac
 performed; first-person framing and multiplayer gameplay still require in-game verification.
 
 Role overrides: see ROLE-COMMANDS.md for `/hunt role <players> <role>` and `auto` restoration.
-Coin release is now 0.25 seconds after clicking (0.2 seconds earlier), and both faces settle upright.
+Coin release is now 0.25 seconds after clicking (0.2 seconds earlier), and the front face settles upright with upward-only flips. Flight time is 1.55 seconds with double the original lift. A separate GUI icon is used for inventory/hotbar displays.
+
 

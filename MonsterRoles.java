@@ -39,6 +39,8 @@ public final class MonsterRoles {
     private static final Map<UUID,Frozen> FROZEN = new HashMap<>();
     private static final Set<UUID> REVIVE_USED = new HashSet<>();
     private static final List<ItemEntity> DROPPED_HEADS = new ArrayList<>();
+    private record StoneWave(ServerLevel level, Vec3 origin, int startedAt) {}
+    private static final List<StoneWave> STONE_WAVES = new ArrayList<>();
     private static final Map<UUID, Corpse> CORPSES = new HashMap<>();
     private static final RoleAssignments ASSIGNMENTS = new RoleAssignments();
     private record Frozen(ServerLevel level, Vec3 position, int until) {}
@@ -206,15 +208,23 @@ public final class MonsterRoles {
             FROZEN.put(target.getUUID(), new Frozen(level, target.position(), now + 40));
             target.displayClientMessage(Component.literal("§7석화! 2초 동안 움직일 수 없습니다."), true);
         }
-        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.5F, 0.5F, 0.5F), 1.4F);
-        for (int i = 0; i < 64; i++) {
-            double angle = i * Math.PI / 32;
-            level.sendParticles(gray, p.getX() + Math.cos(angle) * 5, p.getY() + 0.8,
-                    p.getZ() + Math.sin(angle) * 5, 3, 0.2, 0.6, 0.2, 0);
-        }
-        level.sendParticles(gray, p.getX(), p.getY() + 1, p.getZ(), 100, 2.5, 0.8, 2.5, 0);
+        // This is intentionally outside the target loop: a cast with zero victims still emits the wave.
+        StoneWave wave = new StoneWave(level, p.position(), now);
+        STONE_WAVES.add(wave);
+        emitStoneWave(wave, now);
         level.playSound(null, p.blockPosition(), SoundEvents.STONE_BREAK, SoundSource.PLAYERS, 1, 0.6F);
         if (disposable) stack.shrink(1); else PETRIFY_READY.put(p.getUUID(), now + PETRIFY_COOLDOWN);
+    }
+    private static void emitStoneWave(StoneWave wave, int now) {
+        double progress = Math.min(1.0, Math.max(0.0, (now - wave.startedAt()) / 16.0));
+        double radius = 0.25 + 4.75 * progress;
+        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.5F, 0.5F, 0.5F), 1.4F);
+        for (int i = 0; i < 48; i++) {
+            double angle = i * Math.PI / 24;
+            wave.level().sendParticles(gray, wave.origin().x + Math.cos(angle) * radius,
+                    wave.origin().y + 0.8, wave.origin().z + Math.sin(angle) * radius,
+                    2, 0.07, 0.25, 0.07, 0);
+        }
     }
     private static void transform(ServerPlayer p) {
         int now = p.server.getTickCount(), ready = JACK_READY.getOrDefault(p.getUUID(), 0);
@@ -242,6 +252,12 @@ public final class MonsterRoles {
 
     public static void tick(MinecraftServer server) {
         int now = server.getTickCount();
+        STONE_WAVES.removeIf(wave -> {
+            int age = now - wave.startedAt();
+            if (age > 16) return true;
+            if (age > 0 && age % 2 == 0) emitStoneWave(wave, now);
+            return false;
+        });
         FROZEN.entrySet().removeIf(entry -> {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey()); Frozen f = entry.getValue();
             if (p == null || !HuntManager.isParticipant(p) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) return true;
@@ -306,8 +322,10 @@ public final class MonsterRoles {
         for (Corpse body : CORPSES.values()) body.body.discard();
         CORPSES.clear();
         for (ItemEntity drop : DROPPED_HEADS) if (!drop.isRemoved()) drop.discard();
+        STONE_WAVES.clear();
         DROPPED_HEADS.clear(); PETRIFY_READY.clear(); JACK_READY.clear(); IMMUNE.clear();
         REGEN.clear(); FIRE_READY.clear(); TRANSFORMED.clear(); FROZEN.clear(); REVIVE_USED.clear();
     }
 }
+
 

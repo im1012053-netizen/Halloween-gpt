@@ -60,10 +60,9 @@ public final class CoinRenderEvents {
 
         pose.pushPose();
         pose.translate(frame.x(), frame.y(), frame.z());
-        // Face the opposite direction initially; full flips settle upright on either result.
+        // Keep the initial front upright; every animated rotation is an upward flip.
         pose.mulPose(Axis.YP.rotationDegrees(180));
         pose.mulPose(Axis.XP.rotationDegrees(frame.spin()));
-        pose.mulPose(Axis.YP.rotationDegrees(frame.faceTurn()));
         pose.scale(0.34F, 0.34F, 0.34F);
         // Center the supplied Blockbench model (8,6,8.5) before spinning it.
         pose.translate(0, 0.125, -0.03125);
@@ -73,4 +72,5 @@ public final class CoinRenderEvents {
     }
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event) { CoinNetwork.clearClient(); }
 }
+
 
