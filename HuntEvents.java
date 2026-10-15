@@ -15,6 +15,9 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.LivingDamageEvent;
+import net.minecraftforge.event.entity.living.LivingHealEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -59,6 +62,12 @@ public class HuntEvents {
         if (!HuntManager.isRunning()) return;
         if (!(e.getEntity() instanceof ServerPlayer target) || !HuntManager.isParticipant(target)) return;
 
+        // Head start is for hiding: no combat until the hunter is released.
+        if (HuntManager.isHeadStart()) {
+            e.setCanceled(true);
+            return;
+        }
+
         // 망태기 속 플레이어는 무적
         if (SackManager.isSacked(target)) {
             e.setCanceled(true);
@@ -66,13 +75,19 @@ public class HuntEvents {
         }
         Entity src = e.getSource().getEntity();
         if (src instanceof ServerPlayer attacker && HuntManager.isParticipant(attacker)) {
+            if (SackManager.isSacked(attacker)) {
+                e.setCanceled(true);
+                return;
+            }
             if (HuntManager.isHunter(attacker)) return; // 술래 → 몬스터: 일반 데미지 (검/석궁)
 
             // 몬스터가 때림
             if (HuntManager.isHunter(target)) {
                 boolean stick = HuntItems.is(attacker.getMainHandItem(), HuntItems.STICK)
                         && e.getSource().getDirectEntity() == attacker;
-                if (!stick) e.setCanceled(true);
+                boolean bareHand = attacker.getMainHandItem().isEmpty()
+                        && e.getSource().getDirectEntity() == attacker;
+                if (!stick && !bareHand) e.setCanceled(true);
             } else {
                 e.setCanceled(true); // 몬스터끼리 공격 불가
             }
@@ -91,6 +106,22 @@ public class HuntEvents {
                 e.setAmount(0.01f);
                 HuntManager.onStickHit(attacker, held);
             }
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void damaged(LivingDamageEvent e) {
+        if (e.getAmount() > 0 && e.getEntity() instanceof ServerPlayer p) {
+            HuntManager.recordDamage(p);
+        }
+    }
+
+    /** Replace ordinary automatic healing during a round with the delayed recovery timer. */
+    @SubscribeEvent
+    public static void heal(LivingHealEvent e) {
+        if (e.getEntity() instanceof ServerPlayer p && HuntManager.isParticipant(p)
+                && !HuntManager.isApplyingRecovery()) {
+            e.setCanceled(true);
         }
     }
 
@@ -160,4 +191,5 @@ public class HuntEvents {
         if (e.getEntity() instanceof ServerPlayer p) HuntManager.onLogout(p);
     }
 }
+
 

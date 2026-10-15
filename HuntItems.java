@@ -73,5 +73,10 @@ public final class HuntItems {
         p.getInventory().setItem(0, stick);
         p.getInventory().setItem(1, rope);
         p.setItemSlot(EquipmentSlot.CHEST, new ItemStack(ModItems.MANGTAE_SACK.get()));
+        ItemStack pumpkin = named(new ItemStack(Items.CARVED_PUMPKIN), "mangtae_hat",
+                "망태할아버지의 모자", ChatFormatting.GOLD);
+        pumpkin.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(1001));
+        p.setItemSlot(EquipmentSlot.HEAD, pumpkin);
     }
 }
+

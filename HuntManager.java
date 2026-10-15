@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
@@ -28,6 +29,9 @@ import java.util.*;
 /** 술래잡기(괴물사냥꾼) 게임 진행 */
 public final class HuntManager {
     // ── 조정용 상수 (tick = 1/20초) ──
+    public static final int HEAD_START_TICKS = 30 * 20;
+    public static final int RECOVERY_DELAY = 30 * 20;
+    public static final int RECOVERY_INTERVAL = 2 * 20;
     public static final int TOTAL_TICKS = 5 * 60 * 20;      // 제한시간 5분
     public static final int LATE_TICKS = 4 * 60 * 20;       // 경과 4분 → 랜턴 사용 가능 + 술래 더 빨라짐
     public static final double SPEED_BASE = 0.15;           // 술래 기본 이속 +15%
@@ -50,11 +54,22 @@ public final class HuntManager {
     private static int elapsed;
     private static UUID hunter;
     private static UUID mangtae;
+    private static int headStartRemaining;
+    private static ServerLevel waitingLevel;
+    private static Vec3 waitingPosition;
+    private static final Map<UUID, Integer> nextRecovery = new HashMap<>();
+    private static boolean applyingRecovery;
 
     private HuntManager() {}
 
     // ───────────── 상태 조회 ─────────────
     public static boolean isRunning() { return running; }
+    public static boolean isHeadStart() { return running && headStartRemaining > 0; }
+    public static boolean isApplyingRecovery() { return applyingRecovery; }
+
+    public static void recordDamage(ServerPlayer p) {
+        if (isParticipant(p)) nextRecovery.put(p.getUUID(), p.server.getTickCount() + RECOVERY_DELAY);
+    }
     public static boolean isHunter(Player p) { return running && p.getUUID().equals(hunter); }
     public static boolean isMangtae(Player p) { return running && p.getUUID().equals(mangtae); }
     public static boolean isParticipant(Player p) { return running && (p.getUUID().equals(hunter) || monsters.contains(p.getUUID())); }
@@ -107,24 +122,28 @@ public final class HuntManager {
         caught.clear();
         SackManager.reset();
         elapsed = 0;
+        headStartRemaining = HEAD_START_TICKS;
+        waitingLevel = h.serverLevel();
+        waitingPosition = h.position();
+        nextRecovery.clear();
 
-        bar = new ServerBossEvent(Component.literal("남은 시간 5:00"), BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
+        bar = new ServerBossEvent(Component.literal("술래 출발까지 0:30"), BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
         for (ServerPlayer p : all) {
             prepare(p);
             bar.addPlayer(p);
             if (p != h) monsters.add(p.getUUID());
         }
         HuntItems.giveHunterKit(h);
-        applySpeed(h, SPEED_BASE);
+        h.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, HEAD_START_TICKS, 0, false, false, false));
         if (m != null) HuntItems.giveMangtaeKit(m);
 
         running = true;
 
-        title(h, Component.literal("§c괴물사냥꾼"), Component.literal("5분 안에 몬스터를 모두 잡아라!"));
+        title(h, Component.literal("§c괴물사냥꾼"), Component.literal("30초 대기 후 몬스터를 모두 잡아라!"));
         for (ServerPlayer p : all) {
             if (p == h) continue;
-            if (p == m) title(p, Component.literal("§6망태할아버지"), Component.literal("몬스터를 망태기에 숨겨라!"));
-            else title(p, Component.literal("§a몬스터"), Component.literal("5분 동안 살아남아라!"));
+            if (p == m) title(p, Component.literal("§6망태할아버지"), Component.literal("30초 동안 먼저 도망가라! 망태 능력은 술래 출발 후 사용"));
+            else title(p, Component.literal("§a몬스터"), Component.literal("30초 동안 먼저 도망가라!"));
         }
         broadcast(server, Component.literal("§6[할로윈] §f술래: §c" + h.getName().getString() + " §f/ 몬스터 " + monsters.size() + "명"));
         return null;
@@ -133,6 +152,10 @@ public final class HuntManager {
     public static void stop(MinecraftServer server, Component reason) {
         if (!running) return;
         running = false;
+        headStartRemaining = 0;
+        waitingLevel = null;
+        waitingPosition = null;
+        nextRecovery.clear();
         SackManager.releaseAll(server);
         if (bar != null) bar.removeAllPlayers();
 
@@ -164,20 +187,48 @@ public final class HuntManager {
         }
         if (!running) return;
 
+        ServerPlayer h = server.getPlayerList().getPlayer(hunter);
+        if (h == null) {
+            stop(server, Component.literal("§c술래가 나가서 게임이 종료되었습니다."));
+            return;
+        }
+
+        if (headStartRemaining > 0) {
+            headStartRemaining--;
+            // Lock position server-side while allowing the hunter to turn their view.
+            if (h.serverLevel() != waitingLevel || h.position().distanceToSqr(waitingPosition) > 0.0001) {
+                h.teleportTo(waitingLevel, waitingPosition.x, waitingPosition.y, waitingPosition.z,
+                        h.getYRot(), h.getXRot());
+            }
+            h.setDeltaMovement(0.0, 0.0, 0.0);
+            h.resetFallDistance();
+            int seconds = (headStartRemaining + 19) / 20;
+            bar.setProgress((float) headStartRemaining / HEAD_START_TICKS);
+            bar.setName(Component.literal(String.format("술래 출발까지 0:%02d", seconds)));
+            if (headStartRemaining % 20 == 0 && seconds > 0) {
+                h.displayClientMessage(Component.literal("§e" + seconds + "초 후 출발합니다!"), true);
+            }
+            if (headStartRemaining == 0) {
+                h.removeEffect(MobEffects.BLINDNESS);
+                applySpeed(h, SPEED_BASE);
+                bar.setProgress(1.0F);
+                bar.setName(Component.literal("남은 시간 5:00"));
+                for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                    if (isParticipant(p)) title(p, Component.literal("§c술래 출발!"), Component.literal("지금부터 5분 동안 진행됩니다."));
+                }
+                broadcast(server, Component.literal("§c[할로윈] 술래가 출발했습니다!"));
+            }
+            return; // The five-minute match timer starts AFTER the 30-second head start.
+        }
+
         elapsed++;
         SackManager.tick(server);
-
+        recoverPlayers(server);
         float progress = Math.max(0f, 1f - (float) elapsed / TOTAL_TICKS);
         bar.setProgress(progress);
         if (elapsed % 20 == 0) {
             int sec = Math.max(0, (TOTAL_TICKS - elapsed) / 20);
             bar.setName(Component.literal(String.format("남은 시간 %d:%02d  |  남은 몬스터 %d", sec / 60, sec % 60, monsters.size() - caught.size())));
-        }
-
-        ServerPlayer h = server.getPlayerList().getPlayer(hunter);
-        if (h == null) {
-            stop(server, Component.literal("§c술래가 나가서 게임이 종료되었습니다."));
-            return;
         }
 
         if (elapsed == LATE_TICKS) {
@@ -187,9 +238,34 @@ public final class HuntManager {
         }
 
         if (caught.size() >= monsters.size()) {
-            stop(server, Component.literal("§c§l술래 승리! §f몬스터를 모두 잡았다."));
+            finish(server, true);
         } else if (elapsed >= TOTAL_TICKS) {
-            stop(server, Component.literal("§a§l몬스터 승리! §f생존자 " + (monsters.size() - caught.size()) + "명"));
+            finish(server, false);
+        }
+    }
+
+    private static void finish(MinecraftServer server, boolean hunterWon) {
+        Component winner = Component.literal(hunterWon ? "§c§l술래 승리!" : "§a§l몬스터 승리!");
+        Component detail = Component.literal(hunterWon ? "몬스터를 모두 잡았습니다!" :
+                "생존자 " + (monsters.size() - caught.size()) + "명");
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) title(p, winner, detail);
+        stop(server, Component.literal(hunterWon ? "§c§l술래 승리! §f몬스터를 모두 잡았다." :
+                "§a§l몬스터 승리! §f생존자 " + (monsters.size() - caught.size()) + "명"));
+    }
+
+    private static void recoverPlayers(MinecraftServer server) {
+        int now = server.getTickCount();
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (!isParticipant(p) || caught.contains(p.getUUID()) || !p.isAlive()) continue;
+            Integer readyAt = nextRecovery.get(p.getUUID());
+            if (readyAt == null || now < readyAt || p.getHealth() >= p.getMaxHealth()) continue;
+            applyingRecovery = true;
+            try {
+                p.heal(2.0F); // One heart every two seconds, beginning 30 seconds after the last damage.
+            } finally {
+                applyingRecovery = false;
+            }
+            nextRecovery.put(p.getUUID(), now + RECOVERY_INTERVAL);
         }
     }
 
@@ -230,7 +306,7 @@ public final class HuntManager {
 
     // ───────────── 술래 스킬 ─────────────
     public static void useLantern(ServerPlayer p) {
-        if (!isHunter(p) || p.getCooldowns().isOnCooldown(Items.LANTERN)) return;
+        if (!isHunter(p) || isHeadStart() || SackManager.isSacked(p) || p.getCooldowns().isOnCooldown(Items.LANTERN)) return;
         if (elapsed < LATE_TICKS) {
             int left = (LATE_TICKS - elapsed + 19) / 20;
             p.displayClientMessage(Component.literal("§c랜턴은 4분부터 사용 가능 (" + left + "초 남음)"), true);
@@ -247,7 +323,7 @@ public final class HuntManager {
     }
 
     public static void dash(ServerPlayer p) {
-        if (!isHunter(p) || p.getCooldowns().isOnCooldown(Items.FEATHER)) return;
+        if (!isHunter(p) || isHeadStart() || SackManager.isSacked(p) || p.getCooldowns().isOnCooldown(Items.FEATHER)) return;
         Vec3 look = p.getLookAngle();
         Vec3 dir = new Vec3(look.x, 0, look.z);
         if (dir.lengthSqr() < 1.0E-4) return;
@@ -286,4 +362,5 @@ public final class HuntManager {
         server.getPlayerList().broadcastSystemMessage(msg, false);
     }
 }
+
 
