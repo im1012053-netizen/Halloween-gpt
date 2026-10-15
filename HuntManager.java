@@ -64,6 +64,7 @@ public final class HuntManager {
 
     // ───────────── 상태 조회 ─────────────
     public static boolean isRunning() { return running; }
+    public static UUID currentHunter() { return running ? hunter : null; }
     public static boolean isHeadStart() { return running && headStartRemaining > 0; }
     public static boolean isApplyingRecovery() { return applyingRecovery; }
 
@@ -138,6 +139,7 @@ public final class HuntManager {
         if (m != null) HuntItems.giveMangtaeKit(m);
 
         running = true;
+        HunterAppearance.broadcast(hunter);
 
         title(h, Component.literal("§c괴물사냥꾼"), Component.literal("30초 대기 후 몬스터를 모두 잡아라!"));
         for (ServerPlayer p : all) {
@@ -152,6 +154,7 @@ public final class HuntManager {
     public static void stop(MinecraftServer server, Component reason) {
         if (!running) return;
         running = false;
+        HunterAppearance.broadcast(null);
         headStartRemaining = 0;
         waitingLevel = null;
         waitingPosition = null;

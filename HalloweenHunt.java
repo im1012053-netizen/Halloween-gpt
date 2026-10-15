@@ -12,5 +12,6 @@ public class HalloweenHunt {
     public HalloweenHunt() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModItems.ITEMS.register(modBus);
+        HunterAppearance.init();
     }
 }

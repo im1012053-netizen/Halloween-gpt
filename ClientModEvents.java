@@ -15,6 +15,7 @@ import net.minecraftforge.fml.common.Mod;
 public class ClientModEvents {
     @SubscribeEvent
     public static void addLayers(EntityRenderersEvent.AddLayers e) {
+        HunterSkinEvents.reload(e.getContext());
         for (PlayerSkin.Model model : e.getSkins()) {
             EntityRenderer<?> r = e.getPlayerSkin(model);
             if (r instanceof PlayerRenderer pr) {

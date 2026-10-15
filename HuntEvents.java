@@ -183,7 +183,10 @@ public class HuntEvents {
 
     @SubscribeEvent
     public static void login(PlayerEvent.PlayerLoggedInEvent e) {
-        if (e.getEntity() instanceof ServerPlayer p) HuntManager.giveLobbyKit(p);
+        if (e.getEntity() instanceof ServerPlayer p) {
+            HuntManager.giveLobbyKit(p);
+            HunterAppearance.sync(p, HuntManager.currentHunter());
+        }
     }
 
     @SubscribeEvent
