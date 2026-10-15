@@ -3,6 +3,8 @@ package com.halloweenhunt;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -27,10 +29,14 @@ public final class SackManager {
 
     private static final class Occupant {
         final UUID carrier;
+        final boolean returnHunterToSpawn;
         int windowStart = -1;
         int count = 0;
         boolean lastJump = false;
-        Occupant(UUID carrier) { this.carrier = carrier; }
+        Occupant(UUID carrier, boolean returnHunterToSpawn) {
+            this.carrier = carrier;
+            this.returnHunterToSpawn = returnHunterToSpawn;
+        }
     }
 
     private static final Map<UUID, Occupant> byVictim = new HashMap<>();
@@ -87,7 +93,8 @@ public final class SackManager {
             carrier.displayClientMessage(Component.literal("§c망태기를 상체에 착용해야 합니다."), true);
             return;
         }
-        if (target == carrier || !HuntManager.isMonsterAlive(target) || isSacked(target)) return;
+        if (target == carrier || isSacked(target)) return;
+        if (!HuntManager.isHunter(target) && !HuntManager.isMonsterAlive(target)) return;
 
         int now = carrier.server.getTickCount();
         int next = nextCapture.getOrDefault(carrier.getUUID(), 0);
@@ -95,13 +102,13 @@ public final class SackManager {
             carrier.displayClientMessage(Component.literal("§c망태기 쿨타임 " + ((next - now + 19) / 20) + "초"), true);
             return;
         }
+        if (!target.startRiding(carrier, true)) return;
         nextCapture.put(carrier.getUUID(), now + CAPTURE_COOLDOWN);
 
-        Occupant o = new Occupant(carrier.getUUID());
+        Occupant o = new Occupant(carrier.getUUID(), HuntManager.isHunter(target));
         byVictim.put(target.getUUID(), o);
         victimByCarrier.put(carrier.getUUID(), target.getUUID());
 
-        target.startRiding(carrier, true);
         target.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, MobEffectInstance.INFINITE_DURATION, 0, false, false, false));
 
         carrier.level().playSound(null, carrier.blockPosition(), SoundEvents.WOOL_PLACE, SoundSource.PLAYERS, 1.5f, 0.7f);
@@ -167,7 +174,19 @@ public final class SackManager {
         if (v != null) {
             v.stopRiding();
             v.removeEffect(MobEffects.INVISIBILITY);
-            v.displayClientMessage(Component.literal("§a망태기에서 나왔다!"), true);
+            // Capture-time role is retained even if the game ends before release.
+            if (o.returnHunterToSpawn) {
+                ServerLevel spawnLevel = server.overworld();
+                BlockPos spawn = spawnLevel.getSharedSpawnPos();
+                v.teleportTo(spawnLevel, spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
+                        spawnLevel.getSharedSpawnAngle(), 0.0F);
+                v.setDeltaMovement(0.0, 0.0, 0.0);
+                v.resetFallDistance();
+                v.displayClientMessage(Component.literal("§e망태기에서 나와 스폰으로 돌아왔습니다!"), true);
+            } else {
+                v.displayClientMessage(Component.literal("§a망태기에서 나왔다!"), true);
+            }
         }
     }
 }
+
