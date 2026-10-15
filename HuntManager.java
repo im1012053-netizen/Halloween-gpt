@@ -65,6 +65,15 @@ public final class HuntManager {
 
     public static void resetPastHunters() { pastHunters.clear(); }
 
+    public static boolean isFixedMangtaePlayer(Player p) {
+        return MANGTAE_PLAYER_NAME.equalsIgnoreCase(p.getGameProfile().getName());
+    }
+
+    /** 대기 중에는 지정 플레이어에게 망태기, 막대기, 밧줄을 지급한다. */
+    public static void giveLobbyKit(ServerPlayer p) {
+        if (!running && isFixedMangtaePlayer(p)) HuntItems.giveMangtaeKit(p);
+    }
+
     // ───────────── 시작 / 종료 ─────────────
     /** @return 실패 사유, 성공이면 null */
     public static String start(MinecraftServer server) {
@@ -72,33 +81,28 @@ public final class HuntManager {
         List<ServerPlayer> all = new ArrayList<>(server.getPlayerList().getPlayers());
         if (all.size() < 2) return "최소 2명이 필요합니다.";
 
-        // 망태할아버지는 지정한 플레이어에게만 배정한다.
-        ServerPlayer m = null;
-        for (ServerPlayer p : all) {
-            if (MANGTAE_PLAYER_NAME.equalsIgnoreCase(p.getGameProfile().getName())) {
-                m = p;
-                break;
-            }
-        }
-        if (m == null) return MANGTAE_PLAYER_NAME + " 플레이어가 접속해야 시작할 수 있습니다.";
-
-        // 고정 역할은 술래 후보 및 술래 순환 기록에서 제외한다.
-        List<ServerPlayer> eligibleHunters = new ArrayList<>(all);
-        eligibleHunters.remove(m);
+        // 한 번이라도 술래를 했던 사람은 제외하고 랜덤
         List<ServerPlayer> candidates = new ArrayList<>();
-        for (ServerPlayer p : eligibleHunters) {
-            if (!pastHunters.contains(p.getUUID())) candidates.add(p);
-        }
+        for (ServerPlayer p : all) if (!pastHunters.contains(p.getUUID())) candidates.add(p);
         if (candidates.isEmpty()) {
             pastHunters.clear();
-            candidates.addAll(eligibleHunters);
-            broadcast(server, Component.literal("§7술래 후보가 모두 술래를 해봤으므로 기록을 초기화합니다."));
+            candidates.addAll(all);
+            broadcast(server, Component.literal("§7모두 술래를 해봤으므로 술래 기록을 초기화합니다."));
         }
         ServerPlayer h = candidates.get(RANDOM.nextInt(candidates.size()));
         pastHunters.add(h.getUUID());
 
+        // 지정 플레이어가 몬스터일 때만 망태할아버지로 배정한다.
+        ServerPlayer m = null;
+        for (ServerPlayer p : all) {
+            if (p != h && isFixedMangtaePlayer(p)) {
+                m = p;
+                break;
+            }
+        }
+
         hunter = h.getUUID();
-        mangtae = m.getUUID();
+        mangtae = m == null ? null : m.getUUID();
         monsters.clear();
         caught.clear();
         SackManager.reset();
@@ -112,7 +116,7 @@ public final class HuntManager {
         }
         HuntItems.giveHunterKit(h);
         applySpeed(h, SPEED_BASE);
-        HuntItems.giveMangtaeKit(m);
+        if (m != null) HuntItems.giveMangtaeKit(m);
 
         running = true;
 
@@ -142,6 +146,7 @@ public final class HuntManager {
             p.removeAllEffects();
             p.getInventory().clearContent();
             p.setGameMode(GameType.SURVIVAL);
+            giveLobbyKit(p);
         }
         monsters.clear();
         caught.clear();
