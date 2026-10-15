@@ -151,7 +151,13 @@ public class HuntEvents {
     }
 
     @SubscribeEvent
+    public static void login(PlayerEvent.PlayerLoggedInEvent e) {
+        if (e.getEntity() instanceof ServerPlayer p) HuntManager.giveLobbyKit(p);
+    }
+
+    @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent e) {
         if (e.getEntity() instanceof ServerPlayer p) HuntManager.onLogout(p);
     }
 }
+
