@@ -10,11 +10,24 @@ import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderHandEvent;
+import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 @Mod.EventBusSubscriber(modid = HalloweenHunt.MODID, value = Dist.CLIENT)
 public final class CoinRenderEvents {
+    @SubscribeEvent
+    public static void input(InputEvent.InteractionKeyMappingTriggered event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!event.isUseItem() || mc.player == null || !mc.player.getMainHandItem().is(ModItems.COIN.get())) return;
+        CoinNetwork.Animation animation = CoinNetwork.animation(mc.player.getUUID());
+        if (animation != null && animation.seconds() < CoinMotion.DURATION_SECONDS) {
+            // Server also locks the toss; this covers packet latency while the client is still catching it.
+            event.setCanceled(true);
+            event.setSwingHand(false);
+        }
+    }
+
     @SubscribeEvent
     public static void hand(RenderHandEvent event) {
         if (event.getHand() != InteractionHand.MAIN_HAND || !event.getItemStack().is(ModItems.COIN.get())) return;
