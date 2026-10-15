@@ -11,6 +11,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraft.world.entity.projectile.SmallFireball;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -59,6 +62,7 @@ public class HuntEvents {
     /** 공격 자체를 막을지 결정 */
     @SubscribeEvent
     public static void attack(LivingAttackEvent e) {
+        if (e.getEntity().getTags().contains("halloweenhunt_corpse")) { e.setCanceled(true); return; }
         if (!HuntManager.isRunning()) return;
         if (!(e.getEntity() instanceof ServerPlayer target) || !HuntManager.isParticipant(target)) return;
 
@@ -69,13 +73,13 @@ public class HuntEvents {
         }
 
         // 망태기 속 플레이어는 무적
-        if (SackManager.isSacked(target)) {
+        if (SackManager.isSacked(target) || MonsterRoles.immune(target) || target.isSpectator()) {
             e.setCanceled(true);
             return;
         }
         Entity src = e.getSource().getEntity();
         if (src instanceof ServerPlayer attacker && HuntManager.isParticipant(attacker)) {
-            if (SackManager.isSacked(attacker)) {
+            if (!MonsterRoles.canAct(attacker)) {
                 e.setCanceled(true);
                 return;
             }
@@ -87,7 +91,8 @@ public class HuntEvents {
                         && e.getSource().getDirectEntity() == attacker;
                 boolean bareHand = attacker.getMainHandItem().isEmpty()
                         && e.getSource().getDirectEntity() == attacker;
-                if (!stick && !bareHand) e.setCanceled(true);
+                boolean fireball = e.getSource().getDirectEntity() instanceof SmallFireball && MonsterRoles.isTransformed(attacker);
+                if (!stick && !bareHand && !fireball) e.setCanceled(true);
             } else {
                 e.setCanceled(true); // 몬스터끼리 공격 불가
             }
@@ -113,6 +118,7 @@ public class HuntEvents {
     public static void damaged(LivingDamageEvent e) {
         if (e.getAmount() > 0 && e.getEntity() instanceof ServerPlayer p) {
             HuntManager.recordDamage(p);
+            MonsterRoles.damaged(p);
         }
     }
 
@@ -169,16 +175,50 @@ public class HuntEvents {
 
     /** 우리 아이템이면 true (호출한 쪽에서 이벤트 취소) */
     private static boolean ability(Player player, ItemStack stack) {
+        if (stack.is(ModItems.COIN.get())) {
+            if (player instanceof ServerPlayer sp) CoinTosses.start(sp);
+            return true;
+        }
+        if (MonsterRoles.isAbility(stack)) {
+            if (player instanceof ServerPlayer sp) MonsterRoles.ability(sp, stack);
+            return true;
+        }
         boolean rope = HuntItems.is(stack, HuntItems.ROPE);
         boolean lantern = HuntItems.is(stack, HuntItems.LANTERN);
         boolean dash = HuntItems.is(stack, HuntItems.DASH);
         if (!rope && !lantern && !dash) return false;
         if (player instanceof ServerPlayer sp) {
-            if (rope) SackManager.releaseCarrier(sp);
+            if (rope && MonsterRoles.canAct(sp)) SackManager.releaseCarrier(sp);
             else if (lantern) HuntManager.useLantern(sp);
             else HuntManager.dash(sp);
         }
         return true;
+    }
+
+    @SubscribeEvent
+    public static void headPickup(EntityItemPickupEvent e) {
+        if (HuntItems.is(e.getItem().getItem(), MonsterRoles.HEAD)
+                && (!HuntManager.isMonsterAlive(e.getEntity()) || !MonsterRoles.canAct(e.getEntity()))) e.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void corpseInteract(PlayerInteractEvent.EntityInteract e) {
+        if (e.getTarget().getTags().contains("halloweenhunt_corpse")) {
+            e.setCanceled(true); e.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void corpseInteractSpecific(PlayerInteractEvent.EntityInteractSpecific e) {
+        if (e.getTarget().getTags().contains("halloweenhunt_corpse")) {
+            e.setCanceled(true); e.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent
+    public static void shutdown(ServerStoppingEvent e) {
+        HuntManager.stop(e.getServer(), Component.literal("§7서버 종료로 게임을 종료했습니다."));
+        MonsterRoles.reset(e.getServer()); CoinTosses.reset();
     }
 
     @SubscribeEvent
@@ -194,5 +234,6 @@ public class HuntEvents {
         if (e.getEntity() instanceof ServerPlayer p) HuntManager.onLogout(p);
     }
 }
+
 
 

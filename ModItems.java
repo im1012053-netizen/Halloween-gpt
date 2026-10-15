@@ -12,5 +12,9 @@ public final class ModItems {
     public static final RegistryObject<Item> MANGTAE_SACK =
             ITEMS.register("mangtae_sack", () -> new SackItem(new Item.Properties().stacksTo(1)));
 
+    public static final RegistryObject<Item> COIN =
+            ITEMS.register("coin", () -> new CoinItem(new Item.Properties().stacksTo(1)));
+
     private ModItems() {}
 }
+

@@ -82,7 +82,7 @@ public final class SackManager {
 
     /** 망태 밧줄을 플레이어에게 우클릭 */
     public static void capture(ServerPlayer carrier, ServerPlayer target) {
-        if (HuntManager.isHeadStart() || !HuntManager.isMangtae(carrier) || !HuntManager.isMonsterAlive(carrier)) return;
+        if (!MonsterRoles.canAct(carrier) || HuntManager.isHeadStart() || !HuntManager.isMangtae(carrier) || !HuntManager.isMonsterAlive(carrier)) return;
 
         // 이미 누가 들어있으면 → 다시 쓰면 풀어준다
         if (victimByCarrier.containsKey(carrier.getUUID())) {
@@ -189,5 +189,6 @@ public final class SackManager {
         }
     }
 }
+
 
 
