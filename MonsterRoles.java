@@ -63,7 +63,7 @@ public final class MonsterRoles {
     public static boolean isTransformed(Player p) { return TRANSFORMED.containsKey(p.getUUID()); }
     public static boolean hasCorpse() { return corpse != null; }
     public static boolean isFrozen(Player p) { return FROZEN.containsKey(p.getUUID()); }
-    public static boolean canAct(Player p) { return !p.isSpectator() && !isFrozen(p) && !SackManager.isSacked(p); }
+    public static boolean canAct(Player p) { return !p.isSpectator() && !isFrozen(p) && !(p instanceof ServerPlayer sp && SackManager.isSacked(sp)); }
     public static boolean immune(ServerPlayer p) { return p.server.getTickCount() < IMMUNE.getOrDefault(p.getUUID(), 0); }
 
     public static ItemStack model(ItemStack item, String id, String name, int model) {

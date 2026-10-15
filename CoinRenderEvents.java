@@ -31,13 +31,17 @@ public final class CoinRenderEvents {
 
         // Vanilla right-arm pose, lowered and with a small flick/catch movement.
         pose.pushPose();
-        pose.translate(0.64, -0.78 + frame.handLift(), -0.72);
+        pose.translate(0.375, -0.8185 + frame.handLift(), -0.72);
         pose.mulPose(Axis.YP.rotationDegrees(45));
         pose.translate(-1, 3.6, 3.5);
         pose.mulPose(Axis.ZP.rotationDegrees(120));
-        pose.mulPose(Axis.XP.rotationDegrees(200 - frame.handLift() * 140));
+        pose.mulPose(Axis.XP.rotationDegrees(200));
         pose.mulPose(Axis.YP.rotationDegrees(-135));
         pose.translate(5.6, 0, 0);
+        // Rotate around the palm instead of around the camera to keep the catch aligned.
+        pose.translate(-0.375, 0.75, 0);
+        pose.mulPose(Axis.ZP.rotationDegrees(-frame.handLift() * 100));
+        pose.translate(0.375, -0.75, 0);
         renderer.renderRightHand(pose, buffers, event.getPackedLight(), mc.player);
         pose.popPose();
 
@@ -45,6 +49,8 @@ public final class CoinRenderEvents {
         pose.translate(frame.x(), frame.y(), frame.z());
         pose.mulPose(Axis.XP.rotationDegrees(frame.spin()));
         pose.scale(0.34F, 0.34F, 0.34F);
+        // Center the supplied Blockbench model (8,6,8.5) before spinning it.
+        pose.translate(0, 0.125, -0.03125);
         mc.getItemRenderer().renderStatic(event.getItemStack(), ItemDisplayContext.NONE, event.getPackedLight(),
                 OverlayTexture.NO_OVERLAY, pose, buffers, mc.level, 0);
         pose.popPose();

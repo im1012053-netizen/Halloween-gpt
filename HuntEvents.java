@@ -13,7 +13,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraft.world.entity.projectile.SmallFireball;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -91,7 +90,7 @@ public class HuntEvents {
                         && e.getSource().getDirectEntity() == attacker;
                 boolean bareHand = attacker.getMainHandItem().isEmpty()
                         && e.getSource().getDirectEntity() == attacker;
-                boolean fireball = e.getSource().getDirectEntity() instanceof SmallFireball && MonsterRoles.isTransformed(attacker);
+                boolean fireball = e.getSource().getDirectEntity() instanceof HuntFireball && MonsterRoles.isJack(attacker);
                 if (!stick && !bareHand && !fireball) e.setCanceled(true);
             } else {
                 e.setCanceled(true); // 몬스터끼리 공격 불가
@@ -224,6 +223,9 @@ public class HuntEvents {
     @SubscribeEvent
     public static void login(PlayerEvent.PlayerLoggedInEvent e) {
         if (e.getEntity() instanceof ServerPlayer p) {
+            if (HuntManager.isParticipant(p) && !HuntManager.isHunter(p) && !HuntManager.isMonsterAlive(p)) {
+                p.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+            }
             HuntManager.giveLobbyKit(p);
             HunterAppearance.sync(p, HuntManager.currentHunter());
         }
