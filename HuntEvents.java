@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -65,6 +66,12 @@ public class HuntEvents {
         if (e.getEntity().getTags().contains("halloweenhunt_corpse")) { e.setCanceled(true); return; }
         if (!HuntManager.isRunning()) return;
         if (!(e.getEntity() instanceof ServerPlayer target) || !HuntManager.isParticipant(target)) return;
+
+        // Medusa freezing is a visual cue; it must not add powder-snow damage.
+        if (MonsterRoles.isFrozen(target) && e.getSource().is(DamageTypes.FREEZE)) {
+            e.setCanceled(true);
+            return;
+        }
 
         // Head start is for hiding: no combat until the hunter is released.
         if (HuntManager.isHeadStart()) {

@@ -43,7 +43,7 @@ public final class MonsterRoles {
     private static final List<StoneWave> STONE_WAVES = new ArrayList<>();
     private static final Map<UUID, Corpse> CORPSES = new HashMap<>();
     private static final RoleAssignments ASSIGNMENTS = new RoleAssignments();
-    private record Frozen(ServerLevel level, Vec3 position, int until) {}
+    private record Frozen(ServerLevel level, Vec3 position, int until, int previousFrozenTicks) {}
     private record Transform(ItemStack previousHat, int until) {}
     private static final class Corpse {
         final UUID owner;
@@ -177,7 +177,7 @@ public final class MonsterRoles {
         }
         Transform form = TRANSFORMED.remove(p.getUUID());
         if (form != null) p.setItemSlot(EquipmentSlot.HEAD, form.previousHat());
-        FROZEN.remove(p.getUUID()); REGEN.remove(p.getUUID()); IMMUNE.remove(p.getUUID());
+        clearFrozen(p); REGEN.remove(p.getUUID()); IMMUNE.remove(p.getUUID());
     }
 
     public static boolean ability(ServerPlayer p, ItemStack stack) {
@@ -216,7 +216,11 @@ public final class MonsterRoles {
             if (target == p || target.serverLevel() != level || !HuntManager.isParticipant(target)
                     || target.isSpectator() || !target.isAlive() || SackManager.isSacked(target)
                     || target.position().distanceToSqr(p.position()) > 25) continue;
-            FROZEN.put(target.getUUID(), new Frozen(level, target.position(), now + 40));
+            Frozen previous = FROZEN.get(target.getUUID());
+            int previousTicks = previous == null ? target.getTicksFrozen() : previous.previousFrozenTicks();
+            FROZEN.put(target.getUUID(), new Frozen(level, target.position(), now + 40, previousTicks));
+            // Keep above the full-freeze threshold despite vanilla thawing between server ticks.
+            target.setTicksFrozen(target.getTicksRequiredToFreeze() + 20);
             target.displayClientMessage(Component.literal("§7석화! 2초 동안 움직일 수 없습니다."), true);
         }
         // This is intentionally outside the target loop: a cast with zero victims still emits the wave.
@@ -279,7 +283,12 @@ public final class MonsterRoles {
         });
         FROZEN.entrySet().removeIf(entry -> {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey()); Frozen f = entry.getValue();
-            if (p == null || !HuntManager.isParticipant(p) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) return true;
+            if (p == null) return true;
+            if (!HuntManager.isParticipant(p) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) {
+                p.setTicksFrozen(f.previousFrozenTicks());
+                return true;
+            }
+            p.setTicksFrozen(p.getTicksRequiredToFreeze() + 20);
             p.teleportTo(f.level(), f.position().x, f.position().y, f.position().z, p.getYRot(), p.getXRot());
             p.setDeltaMovement(0, 0, 0); p.resetFallDistance(); return false;
         });
@@ -327,13 +336,22 @@ public final class MonsterRoles {
         Corpse removed = CORPSES.remove(owner);
         if (removed != null) removed.body.discard();
     }
+    private static void clearFrozen(ServerPlayer p) {
+        Frozen previous = FROZEN.remove(p.getUUID());
+        if (previous != null) p.setTicksFrozen(previous.previousFrozenTicks());
+    }
+
     public static void logout(ServerPlayer p) {
         removeCorpse(p.getUUID());
-        FROZEN.remove(p.getUUID());
+        clearFrozen(p);
         Transform t = TRANSFORMED.remove(p.getUUID());
         if (t != null) p.setItemSlot(EquipmentSlot.HEAD, t.previousHat());
     }
     public static void reset(MinecraftServer server) {
+        for (var entry : FROZEN.entrySet()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
+            if (p != null) p.setTicksFrozen(entry.getValue().previousFrozenTicks());
+        }
         for (var entry : TRANSFORMED.entrySet()) {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
             if (p != null) p.setItemSlot(EquipmentSlot.HEAD, entry.getValue().previousHat());
