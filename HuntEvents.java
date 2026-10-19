@@ -38,6 +38,7 @@ public class HuntEvents {
             HuntManager.tick(server);
             MonsterRoles.tickLobby(server);
             MedusaAppearance.tick(server);
+            RoleSounds.tick(server);
         }
     }
 

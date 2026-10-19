@@ -10,7 +10,7 @@ import net.minecraft.world.entity.player.Player;
 
 /** One server decision per toss; cosmetic testing works outside a match for every player. */
 public final class CoinTosses {
-    private record Toss(int endsAt, boolean heads, boolean contract) {}
+    private record Toss(int startsAt, int endsAt, boolean heads, boolean contract) {}
     private static final Map<UUID, Toss> ACTIVE = new HashMap<>();
     private static final Map<UUID, Integer> COOLDOWNS = new HashMap<>();
     private CoinTosses() {}
@@ -26,9 +26,8 @@ public final class CoinTosses {
             return;
         }
         boolean heads = player.getRandom().nextBoolean();
-        ACTIVE.put(player.getUUID(), new Toss(now + CoinMotion.DURATION_TICKS, heads, contract));
+        ACTIVE.put(player.getUUID(), new Toss(now, now + CoinMotion.DURATION_TICKS, heads, contract));
         CoinNetwork.send(player, heads);
-        player.level().playSound(null, player.blockPosition(), SoundEvents.CHAIN_HIT, SoundSource.PLAYERS, 0.5F, 1.8F);
     }
 
     public static void tick(MinecraftServer server) {
@@ -39,6 +38,8 @@ public final class CoinTosses {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
             if (p == null) { it.remove(); continue; }
             Toss toss = entry.getValue();
+            if (now == toss.startsAt() + 5 && p.isAlive() && !p.isSpectator())
+                RoleSounds.play(p, RoleSounds.COIN_FLICK);
             if (now < toss.endsAt()) continue;
             it.remove();
             p.displayClientMessage(Component.literal(toss.heads() ? "§6동전: 앞면!" : "§7동전: 뒷면!"), true);
@@ -58,6 +59,7 @@ public final class CoinTosses {
             {
                 p.teleportTo(target.serverLevel(), target.getX(), target.getY(), target.getZ(), p.getYRot(), p.getXRot());
                 p.resetFallDistance();
+                RoleSounds.play(p, RoleSounds.CONTRACT);
                 COOLDOWNS.put(p.getUUID(), now + 120 * 20);
                 p.sendSystemMessage(Component.literal("§6계약 성공! " + target.getName().getString() + "에게 순간이동했습니다."));
             }

@@ -113,7 +113,7 @@ public final class SackManager {
 
         target.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, MobEffectInstance.INFINITE_DURATION, 0, false, false, false));
 
-        carrier.level().playSound(null, carrier.blockPosition(), SoundEvents.WOOL_PLACE, SoundSource.PLAYERS, 1.5f, 0.7f);
+        RoleSounds.play(carrier, RoleSounds.CAPTURE);
         target.displayClientMessage(Component.literal("§e망태기에 갇혔다! 스페이스바를 3초 안에 " + ESCAPE_PRESSES + "번 연타!"), true);
         carrier.displayClientMessage(Component.literal("§a" + target.getName().getString() + " 을(를) 망태기에 넣었다! (밧줄을 다시 쓰면 꺼냄)"), true);
     }
@@ -174,6 +174,8 @@ public final class SackManager {
         victimByCarrier.remove(o.carrier);
         ServerPlayer v = server.getPlayerList().getPlayer(victimId);
         if (v != null) {
+            ServerPlayer carrier = server.getPlayerList().getPlayer(o.carrier);
+            RoleSounds.play(carrier != null ? carrier : v, RoleSounds.SACK_OPEN);
             v.stopRiding();
             v.removeEffect(MobEffects.INVISIBILITY);
             // Capture-time role is retained even if the game ends before release.

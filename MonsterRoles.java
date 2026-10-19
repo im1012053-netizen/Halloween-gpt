@@ -37,6 +37,7 @@ public final class MonsterRoles {
     private static final Map<UUID,Integer> IMMUNE = new HashMap<>(), REGEN = new HashMap<>(), FIRE_READY = new HashMap<>();
     private static final Map<UUID,Transform> TRANSFORMED = new HashMap<>();
     private static final Map<UUID,Frozen> FROZEN = new HashMap<>();
+    private static final Map<UUID,Integer> REGEN_SOUND_READY = new HashMap<>();
     private static final Set<UUID> REVIVE_USED = new HashSet<>();
     private static final List<ItemEntity> DROPPED_HEADS = new ArrayList<>();
     private record StoneWave(ServerLevel level, Vec3 origin, int startedAt) {}
@@ -143,6 +144,11 @@ public final class MonsterRoles {
         p.getFoodData().setSaturation(0);
         p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 1));
         REGEN.put(p.getUUID(), p.server.getTickCount() + 25);
+        int now = p.server.getTickCount();
+        if (now >= REGEN_SOUND_READY.getOrDefault(p.getUUID(), 0)) {
+            RoleSounds.play(p, RoleSounds.FRANKEN_REGEN);
+            REGEN_SOUND_READY.put(p.getUUID(), now + 100); // Avoid overlapping cues on rapid damage.
+        }
     }
 
     /** Called before spectator conversion, because vanilla inventory drops are suppressed by the minigame. */
@@ -224,31 +230,30 @@ public final class MonsterRoles {
             FROZEN.put(target.getUUID(), new Frozen(level, target.position(), now + 40, previousTicks));
             // Keep above the full-freeze threshold despite vanilla thawing between server ticks.
             target.setTicksFrozen(target.getTicksRequiredToFreeze() + 20);
+            RoleSounds.later(target, 4, RoleSounds.PETRIFY_HIT);
             target.displayClientMessage(Component.literal("§7석화! 2초 동안 움직일 수 없습니다."), true);
         }
         // This is intentionally outside the target loop: a cast with zero victims still emits the wave.
         StoneWave wave = new StoneWave(level, p.position(), now);
         STONE_WAVES.add(wave);
         emitStoneWave(wave, now);
-        level.playSound(null, p.blockPosition(), SoundEvents.STONE_BREAK, SoundSource.PLAYERS, 1, 0.6F);
+        RoleSounds.play(p, RoleSounds.PETRIFY_CAST);
+        RoleSounds.later(p, 2, RoleSounds.PETRIFY_SPELL);
         if (disposable) stack.shrink(1); else PETRIFY_READY.put(p.getUUID(), now + (HuntManager.isRunning() ? PETRIFY_COOLDOWN : 20));
     }
     private static void emitStoneWave(StoneWave wave, int now) {
         double progress = Math.min(1.0, Math.max(0.0, (now - wave.startedAt()) / 24.0));
         double radius = 0.35 + 4.65 * progress;
-        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.72F, 0.72F, 0.72F), 2.0F);
-        // Explicit forced packets keep the skill visible with reduced particle settings.
-        // Two rising bands make expansion visible both in first person and to nearby players.
+        DustParticleOptions gray = new DustParticleOptions(new Vector3f(0.72F, 0.72F, 0.72F), 1.5F);
+        // Eight fixed directions: expanding positions leave eight radial trails, not a dense ring.
         for (ServerPlayer viewer : wave.level().players()) {
             if (viewer.position().distanceToSqr(wave.origin()) > 48 * 48) continue;
-            for (int i = 0; i < 48; i++) {
-                double angle = i * Math.PI / 24;
+            for (int i = 0; i < 8; i++) {
+                double angle = i * Math.PI / 4;
                 double x = wave.origin().x + Math.cos(angle) * radius;
                 double z = wave.origin().z + Math.sin(angle) * radius;
-                for (double height : new double[]{0.3, 1.15}) {
-                    wave.level().sendParticles(viewer, gray, true, x, wave.origin().y + height, z,
-                            1, 0.025, 0.06, 0.025, 0);
-                }
+                wave.level().sendParticles(viewer, gray, true, x, wave.origin().y + 0.8, z,
+                        1, 0.025, 0.06, 0.025, 0);
             }
         }
     }
@@ -261,6 +266,8 @@ public final class MonsterRoles {
         IMMUNE.put(p.getUUID(), now + 200);
         JACK_READY.put(p.getUUID(), now + JACK_COOLDOWN);
         p.setItemSlot(EquipmentSlot.HEAD, model(new ItemStack(Items.CARVED_PUMPKIN), "jack_head", "잭 오 랜턴", 1004));
+        RoleSounds.play(p, RoleSounds.JACK_TRANSFORM);
+        RoleSounds.later(p, 1, RoleSounds.JACK_FIRE);
         p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1, p.getZ(), 40, 0.4, 0.7, 0.4, 0.02);
         p.sendSystemMessage(Component.literal("§610초 동안 무적! 랜턴을 다시 우클릭하면 화염볼을 발사합니다."));
     }
@@ -273,7 +280,7 @@ public final class MonsterRoles {
         ball.setDeltaMovement(look.scale(1.2));
         p.serverLevel().addFreshEntity(ball);
         FIRE_READY.put(p.getUUID(), now + 10);
-        p.level().playSound(null, p.blockPosition(), SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 1, 1);
+        RoleSounds.play(p, RoleSounds.FIREBALL);
     }
 
     public static void tick(MinecraftServer server) {
@@ -311,6 +318,8 @@ public final class MonsterRoles {
             if (p == null) return true;
             if ((HuntManager.isRunning() && !HuntManager.isParticipant(p)) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) {
                 p.setTicksFrozen(f.previousFrozenTicks());
+                if (now >= f.until() && p.isAlive() && !p.isSpectator())
+                    RoleSounds.play(p, RoleSounds.PETRIFY_RELEASE);
                 return true;
             }
             p.setTicksFrozen(p.getTicksRequiredToFreeze() + 20);
@@ -342,6 +351,7 @@ public final class MonsterRoles {
             owner.resetFallDistance();
             IMMUNE.put(owner.getUUID(), now + 60);
             removeCorpse(corpse.owner);
+            RoleSounds.play(owner, RoleSounds.REVIVE);
             HuntManager.broadcast(server, Component.literal("§2프랑켄슈타인 부활! §f3초 동안 무적입니다. 부활 기회는 소모되었습니다."));
         }
     }
@@ -355,12 +365,16 @@ public final class MonsterRoles {
     }
 
     public static void logout(ServerPlayer p) {
+        RoleSounds.clearPlayer(p.getUUID());
+        REGEN_SOUND_READY.remove(p.getUUID());
         removeCorpse(p.getUUID());
         clearFrozen(p);
         Transform t = TRANSFORMED.remove(p.getUUID());
         if (t != null) p.setItemSlot(EquipmentSlot.HEAD, t.previousHat());
     }
     public static void reset(MinecraftServer server) {
+        RoleSounds.reset();
+        REGEN_SOUND_READY.clear();
         for (var entry : FROZEN.entrySet()) {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
             if (p != null) p.setTicksFrozen(entry.getValue().previousFrozenTicks());
