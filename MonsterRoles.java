@@ -184,7 +184,8 @@ public final class MonsterRoles {
         boolean stone = HuntItems.is(stack, PETRIFY), head = HuntItems.is(stack, HEAD);
         boolean jack = HuntItems.is(stack, JACK_LANTERN);
         if (!stone && !head && !jack) return false;
-        if (!HuntManager.isMonsterAlive(p)) {
+        boolean lobbyTest = !HuntManager.isRunning() && stone && role(p) == MonsterRole.MEDUSA;
+        if (!HuntManager.isMonsterAlive(p) && !lobbyTest) {
             p.displayClientMessage(Component.literal("§7스킬은 게임 시작 후 생존한 몬스터만 사용할 수 있습니다."), true);
             return true;
         }
@@ -196,7 +197,7 @@ public final class MonsterRoles {
             p.displayClientMessage(Component.literal("§7석화 또는 망태기 안에서는 스킬을 사용할 수 없습니다."), true);
             return true;
         }
-        if (head || (stone && isMedusa(p))) petrify(p, stack, head);
+        if (head || (stone && (isMedusa(p) || lobbyTest))) petrify(p, stack, head);
         if (jack && isJack(p)) {
             if (isTransformed(p)) fire(p); else transform(p);
         }
@@ -214,7 +215,8 @@ public final class MonsterRoles {
         MedusaAppearance.cast(p);
         ServerLevel level = p.serverLevel();
         for (ServerPlayer target : p.server.getPlayerList().getPlayers()) {
-            if (target == p || target.serverLevel() != level || !HuntManager.isParticipant(target)
+            if (target == p || target.serverLevel() != level
+                    || (HuntManager.isRunning() && !HuntManager.isParticipant(target))
                     || target.isSpectator() || !target.isAlive() || SackManager.isSacked(target)
                     || target.position().distanceToSqr(p.position()) > 25) continue;
             Frozen previous = FROZEN.get(target.getUUID());
@@ -229,7 +231,7 @@ public final class MonsterRoles {
         STONE_WAVES.add(wave);
         emitStoneWave(wave, now);
         level.playSound(null, p.blockPosition(), SoundEvents.STONE_BREAK, SoundSource.PLAYERS, 1, 0.6F);
-        if (disposable) stack.shrink(1); else PETRIFY_READY.put(p.getUUID(), now + PETRIFY_COOLDOWN);
+        if (disposable) stack.shrink(1); else PETRIFY_READY.put(p.getUUID(), now + (HuntManager.isRunning() ? PETRIFY_COOLDOWN : 20));
     }
     private static void emitStoneWave(StoneWave wave, int now) {
         double progress = Math.min(1.0, Math.max(0.0, (now - wave.startedAt()) / 24.0));
@@ -276,23 +278,7 @@ public final class MonsterRoles {
 
     public static void tick(MinecraftServer server) {
         int now = server.getTickCount();
-        STONE_WAVES.removeIf(wave -> {
-            int age = now - wave.startedAt();
-            if (age > 24) return true;
-            if (age > 0 && age % 2 == 0) emitStoneWave(wave, now);
-            return false;
-        });
-        FROZEN.entrySet().removeIf(entry -> {
-            ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey()); Frozen f = entry.getValue();
-            if (p == null) return true;
-            if (!HuntManager.isParticipant(p) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) {
-                p.setTicksFrozen(f.previousFrozenTicks());
-                return true;
-            }
-            p.setTicksFrozen(p.getTicksRequiredToFreeze() + 20);
-            p.teleportTo(f.level(), f.position().x, f.position().y, f.position().z, p.getYRot(), p.getXRot());
-            p.setDeltaMovement(0, 0, 0); p.resetFallDistance(); return false;
-        });
+        tickPetrification(server);
         TRANSFORMED.entrySet().removeIf(entry -> {
             ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey());
             if (p != null && HuntManager.isMonsterAlive(p) && now < entry.getValue().until()) return false;
@@ -307,6 +293,32 @@ public final class MonsterRoles {
         IMMUNE.entrySet().removeIf(entry -> now >= entry.getValue());
         for (Corpse body : new ArrayList<>(CORPSES.values())) tickCorpse(server, now, body);
     }
+    /** The lobby runs only petrification timers, without enabling other roles' round skills. */
+    public static void tickLobby(MinecraftServer server) {
+        if (!HuntManager.isRunning()) tickPetrification(server);
+    }
+
+    private static void tickPetrification(MinecraftServer server) {
+        int now = server.getTickCount();
+        STONE_WAVES.removeIf(wave -> {
+            int age = now - wave.startedAt();
+            if (age > 24) return true;
+            if (age > 0 && age % 2 == 0) emitStoneWave(wave, now);
+            return false;
+        });
+        FROZEN.entrySet().removeIf(entry -> {
+            ServerPlayer p = server.getPlayerList().getPlayer(entry.getKey()); Frozen f = entry.getValue();
+            if (p == null) return true;
+            if ((HuntManager.isRunning() && !HuntManager.isParticipant(p)) || p.isSpectator() || SackManager.isSacked(p) || now >= f.until()) {
+                p.setTicksFrozen(f.previousFrozenTicks());
+                return true;
+            }
+            p.setTicksFrozen(p.getTicksRequiredToFreeze() + 20);
+            p.teleportTo(f.level(), f.position().x, f.position().y, f.position().z, p.getYRot(), p.getXRot());
+            p.setDeltaMovement(0, 0, 0); p.resetFallDistance(); return false;
+        });
+    }
+
     private static void tickCorpse(MinecraftServer server, int now, Corpse corpse) {
         ServerPlayer owner = server.getPlayerList().getPlayer(corpse.owner);
         if (owner == null || now >= corpse.expires || corpse.body.isRemoved()) { removeCorpse(corpse.owner); return; }

@@ -36,6 +36,7 @@ public class HuntEvents {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null) {
             HuntManager.tick(server);
+            MonsterRoles.tickLobby(server);
             MedusaAppearance.tick(server);
         }
     }
@@ -67,14 +68,14 @@ public class HuntEvents {
     @SubscribeEvent
     public static void attack(LivingAttackEvent e) {
         if (e.getEntity().getTags().contains("halloweenhunt_corpse")) { e.setCanceled(true); return; }
-        if (!HuntManager.isRunning()) return;
-        if (!(e.getEntity() instanceof ServerPlayer target) || !HuntManager.isParticipant(target)) return;
-
-        // Medusa freezing is a visual cue; it must not add powder-snow damage.
-        if (MonsterRoles.isFrozen(target) && e.getSource().is(DamageTypes.FREEZE)) {
+        // Test casts also use the frozen-heart visuals; never add freeze damage in the lobby.
+        if (e.getEntity() instanceof ServerPlayer frozen && MonsterRoles.isFrozen(frozen)
+                && e.getSource().is(DamageTypes.FREEZE)) {
             e.setCanceled(true);
             return;
         }
+        if (!HuntManager.isRunning()) return;
+        if (!(e.getEntity() instanceof ServerPlayer target) || !HuntManager.isParticipant(target)) return;
 
         // Head start is for hiding: no combat until the hunter is released.
         if (HuntManager.isHeadStart()) {
