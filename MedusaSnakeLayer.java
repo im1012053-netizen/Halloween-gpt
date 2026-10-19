@@ -24,9 +24,9 @@ public class MedusaSnakeLayer extends RenderLayer<AbstractClientPlayer, PlayerMo
         if (model == null || !MedusaAppearance.visible(player.getUUID()) || player.isSpectator() || player.isInvisible()) return;
         pose.pushPose();
         getParentModel().head.translateAndRotate(pose);
-        pose.translate(0, -0.49, 0);
+        pose.translate(0, -0.10, 0); // Lower the crown 0.39 blocks toward the head.
         // glTF and the player head both face -Z; only convert glTF's upward Y axis.
-        pose.scale(0.55F, -0.55F, 0.55F);
+        pose.scale(0.825F, -0.825F, 0.825F); // 1.5x the original 0.55 scale.
         pose.translate(0, 0, -0.375);
         model.render(pose.last(), buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)), light,
                 (player.tickCount + partialTick) / 20.0, MedusaAppearance.castSeconds(player.getUUID()));

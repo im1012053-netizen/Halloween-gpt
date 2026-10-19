@@ -27,7 +27,7 @@ python bake_snake.py snake.gltf snake.bbmodel snake_frames.gz
 - `assets/halloweenhunt/models/animated/snake_frames.gz`
 - `assets/halloweenhunt/textures/item/snake.png`
 
-`MedusaSnakeLayer`에서 플레이어 머리 회전 기준으로 부착하며 기본 배율은 0.55입니다.
+`MedusaSnakeLayer`에서 플레이어 머리 회전 기준으로 부착하며 기본 배율은 0.825(최초 크기의 1.5배)입니다. 머리 기준 높이를 -0.49에서 -0.10으로 내려 머리 주변에 배치합니다.
 기존 리소스팩의 머리 장식과 겹칠 경우 실제 게임 화면을 기준으로 위치/배율을 조정할 수 있습니다.
 
 ## 확인 절차
