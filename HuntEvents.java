@@ -34,7 +34,10 @@ public class HuntEvents {
     public static void serverTick(TickEvent.ServerTickEvent e) {
         if (e.phase != TickEvent.Phase.END) return;
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server != null) HuntManager.tick(server);
+        if (server != null) {
+            HuntManager.tick(server);
+            MedusaAppearance.tick(server);
+        }
     }
 
     // ───────────── /hunt start | stop | reset ─────────────
@@ -226,6 +229,7 @@ public class HuntEvents {
     public static void shutdown(ServerStoppingEvent e) {
         HuntManager.stop(e.getServer(), Component.literal("§7서버 종료로 게임을 종료했습니다."));
         MonsterRoles.reset(e.getServer()); MonsterRoles.clearAssignments(); CoinTosses.reset();
+        MedusaAppearance.clearServer();
     }
 
     @SubscribeEvent
@@ -236,6 +240,7 @@ public class HuntEvents {
             }
             HuntManager.giveLobbyKit(p);
             HunterAppearance.sync(p, HuntManager.currentHunter());
+            MedusaAppearance.sync(p);
         }
     }
 

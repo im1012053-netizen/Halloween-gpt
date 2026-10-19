@@ -211,6 +211,7 @@ public final class MonsterRoles {
         if (!disposable && now < ready) {
             p.displayClientMessage(Component.literal("§7석화 쿨타임 " + ((ready - now + 19) / 20) + "초"), true); return;
         }
+        MedusaAppearance.cast(p);
         ServerLevel level = p.serverLevel();
         for (ServerPlayer target : p.server.getPlayerList().getPlayers()) {
             if (target == p || target.serverLevel() != level || !HuntManager.isParticipant(target)

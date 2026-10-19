@@ -59,6 +59,7 @@ tasks.named('jar', Jar).configure {
 // The uploaded Blockbench model remains at the repository root; include it in the standard assets path.
 tasks.named('processResources').configure {
     from('coin.json') { into 'assets/halloweenhunt/models/item' }
+    from('snake_frames.gz') { into 'assets/halloweenhunt/models/animated' }
 }
 
 // 해당 버전의 ForgeGradle 에 reobfJar 가 있으면 jar 뒤에 실행 (배포용 난독화)

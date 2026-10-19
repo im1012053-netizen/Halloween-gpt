@@ -14,6 +14,7 @@ public class HalloweenHunt {
         ModItems.ITEMS.register(modBus);
         HunterAppearance.init();
         CoinNetwork.init();
+        MedusaAppearance.init();
     }
 }
 
